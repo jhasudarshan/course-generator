@@ -1,0 +1,33 @@
+.module-sidebar {
+  width: 280px;
+  background-color: #f8f9fa;
+  border-right: 1px solid #e9ecef;
+  padding: 1.5rem 0;
+}
+
+.module-sidebar h3 {
+  padding: 0 1.5rem;
+  margin-bottom: 1rem;
+  color: #2c3e50;
+}
+
+.module-list {
+  list-style: none;
+}
+
+.module-list li {
+  padding: 0.8rem 1.5rem;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  border-left: 3px solid transparent;
+}
+
+.module-list li:hover {
+  background-color: var(--hover-color);
+}
+
+.module-list li.active {
+  background-color: var(--active-color);
+  border-left-color: var(--primary-color);
+  font-weight: 500;
+}
