@@ -1,0 +1,96 @@
+.course-grid-container {
+  padding: 1rem 0;
+}
+
+.course-grid-container h2 {
+  margin-bottom: 1.5rem;
+  text-align: center;
+  color: #2c3e50;
+}
+
+.course-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 2rem;
+}
+
+.course-card {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  overflow: hidden;
+  height: 100%;
+  color: var(--text-color);
+  text-decoration: none;
+}
+
+.course-card:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.1);
+  text-decoration: none;
+}
+
+.course-card-content {
+  padding: 1.5rem;
+}
+
+.course-card h3 {
+  margin-bottom: 1rem;
+  color: #2c3e50;
+  font-size: 1.3rem;
+}
+
+.course-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.course-topic, .course-difficulty, .course-audience {
+  display: block;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.course-date {
+  font-size: 0.8rem;
+  color: #777;
+  margin-top: 1rem;
+}
+
+.course-grid-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 0 10px; /* Add some padding for spacing */
+}
+
+.course-grid-header h2 {
+  margin: 0;
+}
+
+.create-course-button {
+  background-color: #4c6ef5; /* Example button color */
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.create-course-button:hover {
+  background-color: #364fc7;
+}
+
+.create-course-icon {
+  margin-right: 8px;
+  width: 18px;
+  height: 18px;
+}
