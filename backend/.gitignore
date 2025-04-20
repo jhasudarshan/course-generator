@@ -1,0 +1,60 @@
+# Python-related ignores
+__pycache__
+*.py[cod]
+*.so
+*.log
+*.sqlite3
+*.db
+venv/
+*.env
+env/
+.env.local
+*.DS_Store
+
+# FastAPI / Backend
+*.pid
+instance/
+config/settings_local.py
+config/__pycache__/
+
+# Dependencies
+poetry.lock
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtualenv
+.venv/
+env/
+venv.bak/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb_checkpoints/
+
+# Logs & Debugging
+logs/
+*.log
+nohup.out
+
+# Cache & Temp files
+*.swp
+*.swo
+*.swn
+*.bak
+*.tmp
+*.temp
+*.cache
+*.pytest_cache/
+.coverage
+htmlcov/
+
+# Build artifacts
+dist/
+build/
+*.tar.gz
+*.zip
+
+
+# Misc
+*.out
+*.ps1
