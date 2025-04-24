@@ -508,6 +508,92 @@
 }
 
 
+/* Quiz Styles */
+.quiz-question-card {
+  background: var(--card-bg);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.question-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.option-label {
+  display: flex;
+  align-items: center;
+  padding: 0.8rem;
+  border-radius: 4px;
+  background: var(--option-bg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.option-label:hover {
+  background: var(--option-hover-bg);
+}
+
+.option-label.selected {
+  background: var(--option-selected-bg);
+  border-left: 4px solid var(--primary-color);
+}
+
+.option-label.correct {
+  background: var(--correct-option-bg);
+  border-left: 4px solid var(--success-color);
+}
+
+.option-letter {
+  font-weight: 600;
+  margin-right: 0.8rem;
+  color: var(--primary-color);
+}
+
+/* Assignments Styles */
+.assignment-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.assignment-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 1.5rem;
+}
+
+.section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.section-questions {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-left: 1.5rem;
+}
+
+.assignment-question {
+  background: var(--card-bg);
+  padding: 1rem;
+  border-radius: 6px;
+}
+
 
 /* Additional CSS for ModuleContent.css */
 

@@ -6,6 +6,8 @@ import './ModuleContent.css';
 
 function ModuleContent() {
   const [activeTab, setActiveTab] = useState('content');
+  const [selectedAnswers, setSelectedAnswers] = useState({});
+  const [showAnswers, setShowAnswers] = useState(false);
 
   const {
     currentCourse,
@@ -31,6 +33,91 @@ function ModuleContent() {
       </div>
     );
   }
+
+  const handleAnswerSelect = (questionNumber, option) => {
+    setSelectedAnswers(prev => ({ ...prev, [questionNumber]: option }));
+  };
+
+  const renderQuizQuestions = () => {
+    if (!module.quiz_questions?.length) return <p className="no-content">No quiz questions available for this module.</p>;
+
+    return module.quiz_questions.map((question) => (
+      <div key={question.number} className="quiz-question-card">
+        <div className="question-header">
+          <h4>Question {question.number}</h4>
+          {showAnswers && (
+            <span className="correct-answer-tag">
+              Correct Answer: {question.correct}
+            </span>
+          )}
+        </div>
+        
+        <div className="question-text">{question.text}</div>
+        
+        <div className="question-options">
+          {Object.entries(question.options).map(([letter, text]) => (
+            <label 
+              key={letter}
+              className={`option-label ${
+                selectedAnswers[question.number] === letter ? 'selected' : ''
+              } ${
+                showAnswers && letter === question.correct ? 'correct' : ''
+              }`}
+            >
+              <input
+                type="radio"
+                name={`question-${question.number}`}
+                onChange={() => handleAnswerSelect(question.number, letter)}
+                disabled={showAnswers}
+              />
+              <span className="option-letter">{letter}.</span>
+              <span className="option-text">{text}</span>
+            </label>
+          ))}
+        </div>
+
+        {showAnswers && (
+          <div className="question-explanation">
+            <strong>Explanation:</strong> {question.explanation}
+          </div>
+        )}
+      </div>
+    ));
+  };
+
+  const renderAssignments = () => {
+    if (!module.assignments?.sections?.length) return <p className="no-content">No assignments available for this module.</p>;
+
+    return (
+      <div className="assignment-sections">
+        <div className="assignment-header">
+          <h3>{module.assignments.title}</h3>
+          <div className="total-marks">Total Marks: {module.assignments.total_marks}</div>
+        </div>
+
+        {module.assignments.sections.map((section, index) => (
+          <div key={index} className="assignment-section">
+            <div className="section-header">
+              <h4>{section.type}</h4>
+              <span className="marks-per-question">
+                {section.marks_per_question} marks per question
+              </span>
+            </div>
+            
+            <ol className="section-questions">
+              {section.questions.map((question, qIndex) => (
+                <li key={qIndex} className="assignment-question">
+                  <ReactMarkdown rehypePlugins={[rehypeRaw]}>
+                    {question}
+                  </ReactMarkdown>
+                </li>
+              ))}
+            </ol>
+          </div>
+        ))}
+      </div>
+    );
+  };    
 
   return (
     <div className="module-content">
@@ -149,43 +236,31 @@ function ModuleContent() {
         {activeTab === 'quiz' && (
           <div className="quiz-container">
             <div className="quiz-intro">
-              <h3>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
-                  <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                </svg>
-                Quiz Questions
-              </h3>
-              <p>Test your understanding of the module concepts with these questions.</p>
+              <h3>Quiz Questions</h3>
+              <div className="quiz-controls">
+                <button 
+                  className="show-answers-button"
+                  onClick={() => setShowAnswers(!showAnswers)}
+                >
+                  {showAnswers ? 'Hide Answers' : 'Show Answers'}
+                </button>
+              </div>
             </div>
             <div className="quiz-content">
-              <ReactMarkdown rehypePlugins={[rehypeRaw]}>
-                {module.quiz_questions}
-              </ReactMarkdown>
+              {renderQuizQuestions()}
             </div>
           </div>
         )}
 
-        {activeTab === 'assignments' && module.assignments && (
+
+        {activeTab === 'assignments' && (
           <div className="assignments-container">
             <div className="assignments-intro">
-              <h3>
-                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-                  <polyline points="14 2 14 8 20 8"></polyline>
-                  <line x1="16" y1="13" x2="8" y2="13"></line>
-                  <line x1="16" y1="17" x2="8" y2="17"></line>
-                  <polyline points="10 9 9 9 8 9"></polyline>
-                </svg>
-                Assignments
-              </h3>
+              <h3>Assignments</h3>
               <p>Apply what you've learned with these hands-on assignments.</p>
             </div>
             <div className="assignments-content">
-              <ReactMarkdown rehypePlugins={[rehypeRaw]}>
-                {module.assignments}
-              </ReactMarkdown>
+              {renderAssignments()}
             </div>
           </div>
         )}
