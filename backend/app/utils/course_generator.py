@@ -1,73 +1,53 @@
 from app.config.logger_config import logger
 from app.config.config import GEMINI_API_KEY
 from app.utils.youtube import youtube_worker
+from google.api_core.exceptions import ServiceUnavailable, InternalServerError, DeadlineExceeded
 from google import genai
 import re
 import json
+import time
+import datetime
+from typing import Dict, List, Optional
+from dataclasses import dataclass
 
 class GeminiSetup:
     def __init__(self):
         self.client = genai.Client(api_key=GEMINI_API_KEY)
         self.youtube_worker = youtube_worker
 
-    def generate_response(self, query):
-        response = self.client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=[{"role": "user", "parts": [{"text": query}]}]
-        )
-        if response.candidates:
-            return response.candidates[0].content.parts[0].text
+    def generate_response(self, query, retries=3, backoff=2):
+        attempt = 0
+        while attempt <= retries:
+            try:
+                response = self.client.models.generate_content(
+                    model="gemini-2.0-flash",
+                    contents=[{"role": "user", "parts": [{"text": query}]}]
+                )
+                if response.candidates:
+                    return response.candidates[0].content.parts[0].text
+                return ""
+            except (ServiceUnavailable, InternalServerError, DeadlineExceeded) as e:
+                attempt += 1
+                wait_time = backoff ** attempt
+                logger.warning(f"Gemini API error: {e}. Retrying in {wait_time} seconds... (Attempt {attempt}/{retries})")
+                time.sleep(wait_time)
+            except Exception as e:
+                logger.error(f"Unhandled exception during Gemini API call: {e}")
+                break
         return ""
-    
-    """Create a plan for course generation"""
-    def plan_course(self, user_input):
-        planning_prompt = f"""
-        You are an expert course designer. Create a detailed plan for a {user_input['difficulty']} level course on "{user_input['topic']}" in {user_input['language']}.
-        
-        Course requirements:
-        - Target language: {user_input['language']}
-        - Difficulty level: {user_input['difficulty']}
-        - Description: {user_input.get('description', 'No description provided')}
-        - Number of modules: {user_input.get('module_count', 8)}
-        
-        Provide:
-        1. Overall course structure
-        2. Key learning outcomes
-        3. Module topics (high-level)
-        4. Recommended teaching approaches for this subject in {user_input['language']}
-        5. Any cultural considerations for teaching this subject in {user_input['language']}
-        
-        Format as structured JSON with these keys: "structure", "outcomes", "modules", "approaches", "cultural_notes"
-        """
-        
-        plan_response = self.generate_response(planning_prompt)
-        
-        try:
-            # Extract JSON from response (in case there's explanatory text around it)
-            json_match = re.search(r'```json\s*([\s\S]*?)\s*```', plan_response)
-            if json_match:
-                plan_json = json.loads(json_match.group(1))
-            else:
-                plan_json = json.loads(plan_response)
-                
-            logger.info("Course plan generated successfully")
-            return plan_json
-        except json.JSONDecodeError:
-            logger.error("Failed to parse course plan as JSON")
-            return {"error": "Failed to generate valid course plan"}
         
     
     """Generate an optimized prompt based on user input"""
     def optimize_user_input_prompt(self, user_input):
         language_expertise_prompt = f"""
-        As a native {user_input['language']} speaker and education expert, provide guidance on:
-        
-        1. How to best structure educational content for {user_input['language']} speakers
-        2. Any cultural elements to incorporate when teaching "{user_input['topic']}" in {user_input['language']}
-        3. Common pedagogical approaches in {user_input['language']}-speaking regions
-        4. Key terminology for "{user_input['topic']}" in {user_input['language']}
-        
-        Format as a concise instruction paragraph.
+            As a native {user_input['language']} speaker and education expert, provide guidance on:
+            
+            1. How to best structure educational content for {user_input['language']} speakers
+            2. Any cultural elements to incorporate when teaching "{user_input['topic']}" in {user_input['language']}
+            3. Common pedagogical approaches in {user_input['language']}-speaking regions
+            4. Key terminology for "{user_input['topic']}" in {user_input['language']}
+            
+            Format as a concise instruction paragraph.
         """
         
         language_expertise = self.generate_response(language_expertise_prompt)
@@ -82,8 +62,7 @@ class GeminiSetup:
             f"{description_part}"
             f"Language: {user_input['language']}\n"
             f"Difficulty: {user_input['difficulty']}\n"
-            f"Module count: {user_input.get('module_count', 1)}\n\n"
-            "Ensure content is culturally relevant and linguistically appropriate. Format as a directive."
+            "Ensure content is culturally relevant and linguistically appropriate and written format follow perticular linguistically. Format as a directive."
         )
         
         improved_prompt = self.generate_response(base_prompt).strip()
@@ -93,13 +72,16 @@ class GeminiSetup:
     def generate_course_outline(self, user_input):
         """Generate a full course outline based on user input"""
         try:
-            # First get the course plan
-            # course_plan = self.plan_course(user_input)
-            
-            # Then optimize the prompt
+            # optimize the prompt
             improved_prompt = self.optimize_user_input_prompt(user_input)
             
-            module_count = user_input.get('module_count', 2)
+            difficulty = user_input.get("difficulty")
+            if difficulty == "Beginner":
+                module_count = 7
+            elif difficulty =="Intermediate":
+                module_count = 10
+            else:
+                module_count = 14
             
             prompt = (
                 f"{improved_prompt}\n\n"
@@ -261,7 +243,6 @@ class GeminiSetup:
             f"2. Include culturally relevant examples for {user_input['language']} speakers\n"
             f"3. Include clear explanations, practical examples, and exercises\n"
             f"4. Structure with headings, subheadings, and short paragraphs\n"
-            f"5. Include terminology in both {user_input['language']} and English where helpful\n"
             f"Write content that a native {user_input['language']} teacher would create."
         )
         
@@ -270,46 +251,79 @@ class GeminiSetup:
         
         # Generate YouTube video data
         logger.info(f"Generating YouTube video data for '{module['title']}'")
-        youtube_data = self._generate_youtube_video_data(module, user_input)
+        youtube_data = self._generate_youtube_video_data(module,user_input,lesson_prompt)
         
         # Generate multilingual quiz content
         quiz_prompt = (
-            f"Create 10-20 culturally appropriate multiple-choice quiz questions in {user_input['language']} "
-            f"to test understanding of '{module['title']}' at {user_input['difficulty']} level.\n\n"
-            f"For each question:\n"
-            f"1. Write a clear question in natural {user_input['language']}\n"
-            f"2. Provide 4 options (A, B, C, D)\n"
-            f"3. Indicate the correct answer\n"
-            f"4. Add a brief explanation for why it's correct\n\n"
-            f"Format as:\nQ1. [Question]\nA. [Option]\nB. [Option]\nC. [Option]\nD. [Option]\nCorrect: [Letter]\nExplanation: [Brief explanation]"
+            f"Based on this lesson content about '{module['title']}':\n\n"
+            f"{lesson_content[:2000]}... [truncated]\n\n"
+            f"Create 10-15 high-quality quiz questions in {user_input['language']} that test understanding of key concepts.\n\n"
+            f"Requirements:\n"
+            f"1. Include questions covering all learning objectives: {', '.join(module['objectives'])}\n"
+            f"2. Mix of question types (conceptual, application, terminology)\n"
+            f"3. Each question should have:\n"
+            f"   - Clear stem in {user_input['language']}\n"
+            f"   - 4 plausible options (A-D)\n"
+            f"   - Correct answer marked\n"
+            f"   - Brief explanation (why it's correct)\n"
+            f"4. Include 2-3 questions requiring critical thinking about cultural aspects\n\n"
+            f"Format each question as:\n"
+            f"Q1. [Question text]\n"
+            f"A. [Option A]\n"
+            f"B. [Option B]\n"
+            f"C. [Option C]\n"
+            f"D. [Option D]\n"
+            f"Correct: [Letter]\n"
+            f"Explanation: [1-2 sentence explanation]"
         )
         
         logger.info(f"Generating quiz questions for '{module['title']}'")
         quiz_content = self.generate_response(quiz_prompt)
         
-        # Generate culturally appropriate assignments
+        structured_quiz_questions = self.parse_quiz_content(quiz_content)
+        
+        # Generate assignment with multiple question types
         assignment_prompt = (
-            f"Design 2 practical assignments for '{module['title']}' in {user_input['language']}, "
-            f"aligned with these objectives: {', '.join(module['objectives'])}.\n\n"
-            f"Requirements:\n"
-            f"1. Make assignments culturally relevant to {user_input['language']} speakers\n"
-            f"2. Suitable for {user_input['difficulty']} level learners\n"
-            f"3. Include clear instructions, evaluation criteria, and estimated completion time\n"
-            f"4. One shorter assignment (30-60 minutes) and one in-depth project (2-3 hours)\n\n"
-            f"Format each assignment with title, description, steps, and evaluation criteria."
+            f"Based on this lesson about '{module['title']}':\n\n"
+            f"{lesson_content[:2000]}... [truncated]\n\n"
+            f"Create 1 comprehensive practice assignment containing:\n"
+            f"1. 5-8 short answer questions (3 marks each)\n"
+            f"2. 3-5 problem solving questions (6 marks each)\n"
+            f"3. 2-4 critical thinking essays (12 marks each)\n\n"
+            f"Format requirements:\n"
+            f"## Assignment: [Title]\n"
+            f"### 3 Mark Questions\n"
+            f"[Question 1]\n[Question 2]...\n\n"
+            f"### 6 Mark Problems\n"
+            f"[Problem 1]\n[Problem 2]...\n\n"
+            f"### 12 Mark Essays\n"
+            f"[Essay Topic 1]\n[Essay Topic 2]...\n\n"
+            f"Include clear instructions for each section."
         )
         
-        logger.info(f"Generating assignments for '{module['title']}'")
+        logger.info(f"Generating assignment for '{module['title']}'")
         assignment_content = self.generate_response(assignment_prompt)
+        structured_assignment = self.parse_assignment_content(assignment_content)
         
         # Generate additional resources
         resources_prompt = (
-            f"Recommend 3-5 learning resources for students studying '{module['title']}' in {user_input['language']}.\n\n"
-            f"Include a mix of:\n"
-            f"1. Books or textbooks in {user_input['language']}\n"
-            f"2. Online resources (websites, articles) in {user_input['language']}\n"
-            f"3. Tools or software with {user_input['language']} support\n\n"
-            f"For each resource, provide title, brief description, and why it's valuable."
+            f"For students learning about '{module['title']}' in {user_input['language']}, recommend 3-5 high-quality resources.\n\n"
+            f"Base recommendations on this lesson content:\n\n"
+            f"{lesson_content[:1000]}... [truncated]\n\n"
+            f"Requirements:\n"
+            f"1. Include diverse resource types (book, video, website, tool)\n"
+            f"2. All resources must be available in {user_input['language']}\n"
+            f"3. For each resource provide:\n"
+            f"   - Title/Name\n"
+            f"   - Type (book, video, etc.)\n"
+            f"   - Brief description (what it covers)\n"
+            f"   - Why it's valuable for this topic\n"
+            f"   - Where to find it (URL if online)\n\n"
+            f"Format each resource as:\n"
+            f"- [Type]: [Title]\n"
+            f"  Description: [text]\n"
+            f"  Value: [text]\n"
+            f"  Location: [text/URL]"
         )
         
         logger.info(f"Generating additional resources for '{module['title']}'")
@@ -321,63 +335,314 @@ class GeminiSetup:
             "objectives": module['objectives'],
             "lesson_content": lesson_content,
             "youtube_data": youtube_data,
-            "quiz_questions": quiz_content,
-            "assignments": assignment_content,
-            "additional_resources": resources_content
+            "quiz_questions": structured_quiz_questions,
+            "assignments": structured_assignment,
+            "additional_resources": resources_content,
+            "generation_context": {
+                "language": user_input['language'],
+                "difficulty": user_input['difficulty'],
+                "topic": user_input['topic'],
+                "timestamp": datetime.datetime.now().isoformat()
+            }
         }
+        
+        
+    def parse_quiz_content(self, quiz_content):
+        """Robust quiz parser handling both markdown and plain text formats"""
+        logger.info("Starting quiz content parsing")
+        quiz_questions = []
+        current_question = None
+        
+        # Flexible patterns that handle markdown and plain formats
+        question_pattern = re.compile(
+            r'^\*?Q(\d+)\.?\*?\s*[:-]?\s*(.*?)(?:\*?)$', 
+            re.IGNORECASE
+        )
+        option_pattern = re.compile(
+            r'^\*?([A-D])[\.\)]\*?\s*(.+?)(?:\*?)$', 
+            re.IGNORECASE
+        )
+        correct_pattern = re.compile(
+            r'^(?:Correct|Answer|सही)\s*[:-]?\s*([A-D])', 
+            re.IGNORECASE
+        )
+        explanation_pattern = re.compile(
+            r'^(?:Explanation|Explicación|विवरण|समझ)\s*[:-]?\s*(.*)', 
+            re.IGNORECASE
+        )
 
-    """Generate YouTube search queries and find videos"""
-    def _generate_youtube_video_data(self, module, user_input):
-        # Generate culturally and linguistically appropriate search queries
-        youtube_prompt = (
-            f"Generate 3 YouTube search phrases in {user_input['language']} for the topic '{module['title']}'.\n\n"
-            f"Guidelines:\n"
-            f"1. Each phrase should be 5-8 words\n"
-            f"2. Include '{user_input['language']}' as one of the search terms\n"
-            f"3. Include terms like 'tutorial', 'lesson', or 'how to' in {user_input['language']}\n"
-            f"4. Target {user_input['difficulty']} level content\n\n"
-            f"Return only the search phrases, one per line, no numbering or formatting."
+        for line_num, line in enumerate(quiz_content.split('\n'), 1):
+            raw_line = line.strip()
+            line = re.sub(r'\*+', '', raw_line)  # Remove all asterisks
+            logger.debug(f"Processing line {line_num}: {raw_line}")
+
+            # Question detection (handles both **Q1** and Q1 formats)
+            if match := question_pattern.match(line):
+                if current_question:
+                    self._validate_and_add_question(current_question, quiz_questions)
+                current_question = {
+                    "number": int(match.group(1)),
+                    "text": match.group(2).strip(),
+                    "options": {},
+                    "correct": None,
+                    "explanation": ""
+                }
+                logger.debug(f"New question detected: Q{current_question['number']}")
+                continue
+
+            if current_question:
+                # Option detection (handles A), A., **A.** etc.)
+                if match := option_pattern.match(line):
+                    opt_letter = match.group(1).upper()
+                    current_question["options"][opt_letter] = match.group(2).strip()
+                    logger.debug(f"Added option {opt_letter}")
+                    continue
+
+                # Correct answer detection
+                if match := correct_pattern.match(line):
+                    current_question["correct"] = match.group(1).upper()
+                    logger.debug(f"Marked correct answer: {current_question['correct']}")
+                    continue
+
+                # Explanation detection
+                if match := explanation_pattern.match(line):
+                    current_question["explanation"] = match.group(1).strip()
+                    logger.debug("Explanation added")
+                    continue
+
+                # Handle multi-line explanations and options
+                if raw_line:  # Only process non-empty lines
+                    self._handle_continuation(current_question, raw_line)
+
+        # Add final question
+        if current_question:
+            self._validate_and_add_question(current_question, quiz_questions)
+
+        logger.info(f"Successfully parsed {len(quiz_questions)} questions")
+        return quiz_questions
+
+    def _handle_continuation(self, current_question, line):
+        """Handle multi-line content and formatting variations"""
+        # Check if we're in explanation continuation
+        if current_question["explanation"]:
+            current_question["explanation"] += " " + line.strip()
+            logger.debug("Extended explanation")
+            return
+        
+        # Check for option continuation without letter
+        if current_question["options"]:
+            last_option = sorted(current_question["options"].keys())[-1]
+            current_question["options"][last_option] += " " + line.strip()
+            logger.debug(f"Extended option {last_option}")
+
+    def _validate_and_add_question(self, question, question_list):
+        """Validation with comprehensive checks"""
+        errors = []
+        
+        # Required fields check
+        if not question.get("options"):
+            errors.append("Missing options")
+        if not question.get("correct"):
+            errors.append("Missing correct answer")
+        if not question.get("explanation"):
+            errors.append("Missing explanation")
+            
+        # Answer validity check
+        if question.get("correct") and question["correct"] not in question.get("options", {}):
+            errors.append(f"Correct answer {question['correct']} not in options")
+            
+        if errors:
+            logger.warning(f"Skipping Q{question.get('number')}: {', '.join(errors)}")
+            return False
+            
+        question_list.append(question)
+        return True
+
+
+    def parse_assignment_content(self, content):
+        """Parse assignment with multiple question types and mark values"""
+        assignment = {
+            "title": "",
+            "sections": [],
+            "total_marks": 0
+        }
+        
+        current_section = None
+        mark_pattern = r'(\d+)\s+Mark\s+(Questions|Problems|Essays)'
+        
+        lines = content.split('\n')
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # Extract assignment title
+            if line.startswith('## Assignment:'):
+                assignment['title'] = line.split(':', 1)[-1].strip()
+                continue
+                
+            # Detect new section
+            section_match = re.match(r'###\s*(.+)', line)
+            if section_match:
+                section_title = section_match.group(1)
+                marks_match = re.search(mark_pattern, section_title)
+                
+                current_section = {
+                    "type": section_title.split('(')[0].strip(),
+                    "marks_per_question": int(marks_match.group(1)) if marks_match else 0,
+                    "questions": []
+                }
+                assignment['sections'].append(current_section)
+                continue
+                
+            # Detect numbered questions
+            if current_section and re.match(r'^\d+\.', line):
+                question = re.sub(r'^\d+\.\s*', '', line).strip()
+                if question:
+                    current_section['questions'].append(question)
+                    # Update total marks
+                    if current_section['marks_per_question'] > 0:
+                        assignment['total_marks'] += current_section['marks_per_question']
+
+        # Calculate total marks if not detected
+        if assignment['total_marks'] == 0:
+            for section in assignment['sections']:
+                assignment['total_marks'] += len(section['questions']) * section['marks_per_question']
+
+        return assignment
+
+    def _generate_youtube_video_data(self, module, user_input, lesson_content):
+        logger.info(f"Generating YouTube data for: {module['title']}")
+        
+        # Generate search query directly from lesson content
+        prompt = f"""Create one YouTube search query for "{module['title']}" using these key points:
+            {lesson_content[:500]}
+            Language: {user_input['language']}
+            Difficulty: {user_input['difficulty']}
+            Format: 5-8 words, no special characters"""
+            
+        raw_query = self.generate_response(prompt)
+        
+        # Clean and format the query
+        search_query = raw_query.strip().replace('\n', ' ').replace('"', '')[:60]  # Limit to 60 chars
+        logger.info(f"Final search query: {search_query}")
+        
+        # Get video result
+        video_data = youtube_worker.search_youtube_videos(
+            search_query, 
+            user_input['language'].lower()
         )
         
-        search_queries_text = self.generate_response(youtube_prompt)
-        search_queries = self._clean_search_queries(search_queries_text)
-        
-        video_info = None
-        if search_queries:
-            video_info = self._get_unique_video(search_queries, user_input['language'])
-        
         return {
-            "search_queries": search_queries,
-            "video_info": video_info
+            "search_query": search_query,
+            "video_info": video_data or {}
         }
     
-    """Clean and extract search queries from text"""
-    def _clean_search_queries(self, text):
-        queries = []
-        for line in text.split('\n'):
-            line = line.strip()
-            if line and not any(line.startswith(c) for c in ['```', '[', '*', '-', '#']):
-                queries.append(line)
-                if len(queries) >= 3:
-                    break
-        return queries[:3]
-
-    """Find a unique video from a list of search queries"""
-    def _get_unique_video(self, queries, language):
-        for query in queries:
-            try:
-                response = self.youtube_worker.search_youtube_videos(query, language=language)
-                if response:
-                    return response
-            except Exception as e:
-                logger.error(f"Error searching for {query}: {e}")
-                
-        try:
-            if queries:
-                return self.youtube_worker.search_youtube_videos(queries[0], language=language)
-        except Exception:
-            pass
+@dataclass
+class CourseFeedback:
+    completeness_score: float  # 0-1 scale
+    cultural_relevance_score: float
+    suggested_improvements: List[str]
+    
+class AutoCourseAgent(GeminiSetup):
+    def __init__(self):
+        super().__init__()
+        self.max_retries = 3
+        self.quality_threshold = 0.8  # Minimum acceptable score
+    
+    def run_agent(self, user_input: Dict) -> Dict:
+        """Orchestrate the full automation pipeline"""
+        course = None
+        feedback = None
+        
+        for attempt in range(self.max_retries):
+            # Generate course
+            course = self.generate_course_outline(user_input)
             
-        return None
+            # Self-evaluate
+            feedback = self.analyze_course(course, user_input)
+            
+            # Exit if quality meets threshold
+            if feedback.completeness_score >= self.quality_threshold:
+                break
+                
+            # Improve course
+            user_input = self._apply_feedback(user_input, feedback)
+            time.sleep(2)  # Rate limit handling
+        
+        return {
+            "course": course,
+            "feedback": feedback,
+            "is_approved": feedback.completeness_score >= self.quality_threshold
+        }
+
+    def analyze_course(self, course: Dict, user_input: Dict) -> CourseFeedback:
+        """Automatically evaluate course quality"""
+        analysis_prompt = f"""
+        Analyze this course draft for {user_input['topic']} in {user_input['language']}:
+        
+        Evaluation Criteria:
+        1. **Completeness** (0-1): All modules have objectives, content, assessments
+        2. **Cultural Relevance** (0-1): Appropriate for {user_input['language']} speakers
+        3. **Pedagogical Soundness**: Follows best teaching practices
+        
+        Course Content:
+        {json.dumps(course, indent=2)}
+        
+        Respond ONLY with this JSON format:
+        {{
+            "completeness_score": 0.0-1.0,
+            "cultural_relevance_score": 0.0-1.0,
+            "suggested_improvements": ["list", "of", "specific", "actions"]
+        }}
+        """
+        
+        response = self.generate_response(analysis_prompt)
+        try:
+            return CourseFeedback(**json.loads(response))
+        except:
+            return CourseFeedback(0.5, 0.5, ["Analysis failed"])
+
+    def _apply_feedback(self, user_input: Dict, feedback: CourseFeedback) -> Dict:
+        """Modify user input based on feedback"""
+        improvement_prompt = f"""
+        Original Input: {user_input}
+        Feedback: {feedback}
+        
+        Suggest improved input parameters addressing:
+        - {', '.join(feedback.suggested_improvements[:3])}
+        
+        Return ONLY the modified JSON input (preserve all original keys).
+        """
+        
+        improved_input = self.generate_response(improvement_prompt)
+        try:
+            return {**user_input, **json.loads(improved_input)}
+        except:
+            return user_input
+
+    # Override for auto-generation
+    def _process_module(self, module: Dict, user_input: Dict) -> Dict:
+        """Enhanced with automatic quality checks"""
+        for attempt in range(2):  # One retry
+            module_data = super()._process_module(module, user_input)
+            if self._validate_module(module_data, user_input):
+                return module_data
+        return module_data  # Return even if validation fails
+
+    def _validate_module(self, module: Dict, user_input: Dict) -> bool:
+        """Check module meets minimum standards"""
+        validation_prompt = f"""
+        Verify this module meets requirements for {user_input['language']}:
+        - Contains all key components (title, objectives, content)
+        - Objectives match content
+        - Cultural references appropriate for {user_input['language']}
+        
+        Module: {json.dumps(module)}
+        
+        Respond ONLY with "VALID" or "INVALID: [reason]".
+        """
+        response = self.generate_response(validation_prompt)
+        return "VALID" in response
 
 course_agent = GeminiSetup()
