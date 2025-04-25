@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import CourseGrid from './components/components/CourseGrid';
-import CourseDetail from './components/components/CourseDetail';
-import CourseCreationPage from './components/components/CourseCreationPage';
+import CourseGrid from './components/CourseGrid';
+import CourseDetail from './components/CourseDetail';
+import CourseCreationPage from './components/CourseCreationPage';
 
 import './App.css';
 

@@ -59,3 +59,38 @@
   color: #777;
   margin-top: 1rem;
 }
+
+.course-grid-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 0 10px; /* Add some padding for spacing */
+}
+
+.course-grid-header h2 {
+  margin: 0;
+}
+
+.create-course-button {
+  background-color: #4c6ef5; /* Example button color */
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 5px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  font-size: 0.9rem;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.create-course-button:hover {
+  background-color: #364fc7;
+}
+
+.create-course-icon {
+  margin-right: 8px;
+  width: 18px;
+  height: 18px;
+}

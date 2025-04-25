@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import useCourseStore from '../../store/CourseStore';
+import useCourseStore from '../store/CourseStore';
 import { ArrowLeft, BookOpen, Award, Languages, FileText, Loader2, Sparkles } from 'lucide-react';
 import './CourseCreationPage.css';
 
