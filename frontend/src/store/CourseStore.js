@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import BACKEND_URL from "../config/config"
 
 const useCourseStore = create((set) => ({
   // Courses list state
@@ -20,7 +21,7 @@ const useCourseStore = create((set) => ({
   fetchCourses: async () => {
     set({ coursesLoading: true, coursesError: null });
     try {
-      const response = await fetch("/api/courses");
+      const response = await fetch(`${BACKEND_URL}/api/courses`);
       if (!response.ok) throw new Error("Failed to fetch courses");
       const data = await response.json();
       set({ courses: data, coursesLoading: false });
@@ -32,7 +33,7 @@ const useCourseStore = create((set) => ({
   fetchCourseDetails: async (courseId) => {
     set({ coursesLoading: true, coursesError: null });
     try {
-      const response = await fetch(`/api/courses/${courseId}`);
+      const response = await fetch(`${BACKEND_URL}/api/courses/${courseId}`);
       if (!response.ok) throw new Error("Failed to fetch course details");
       const data = await response.json();
       set({ currentCourse: data, coursesLoading: false, activeModuleIndex: 0 });
@@ -49,11 +50,10 @@ const useCourseStore = create((set) => ({
     set({
       generationLoading: true,
       generationError: null,
-      generationJobId: null,
-      generationSuccessRedirect: null,
+      generationJobId: null
     });
     try {
-      const response = await fetch("/api/generate-course", {
+      const response = await fetch(`${BACKEND_URL}/api/generate-course`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -73,8 +73,7 @@ const useCourseStore = create((set) => ({
       const data = await response.json();
       set({
         generationJobId: data.job_id,
-        generationLoading: false,
-        generationSuccessRedirect: "/courses", // Set the redirect URL on success
+        generationLoading: false
       });
     } catch (error) {
       console.error("Error generating course:", error);
