@@ -40,14 +40,15 @@ class GeminiSetup:
     """Generate an optimized prompt based on user input"""
     def optimize_user_input_prompt(self, user_input):
         language_expertise_prompt = f"""
-            As a native {user_input['language']} speaker and education expert, provide guidance on:
+            You are a native {user_input['language']} speaker and an expert in curriculum design.
+
+            Provide brief insights on:
+            1. Best practices for structuring educational content in {user_input['language']}
+            2. Cultural elements to consider when teaching "{user_input['topic']}" in {user_input['language']}
+            3. Common teaching strategies in {user_input['language']}-speaking regions
+            4. Key domain-specific terms for "{user_input['topic']}" in {user_input['language']}"
             
-            1. How to best structure educational content for {user_input['language']} speakers
-            2. Any cultural elements to incorporate when teaching "{user_input['topic']}" in {user_input['language']}
-            3. Common pedagogical approaches in {user_input['language']}-speaking regions
-            4. Key terminology for "{user_input['topic']}" in {user_input['language']}
-            
-            Format as a concise instruction paragraph.
+            Format the response as a short instructional paragraph.
         """
         
         language_expertise = self.generate_response(language_expertise_prompt)
@@ -55,15 +56,27 @@ class GeminiSetup:
         description = user_input.get("description", "").strip()
         description_part = f"Description: {description}\n" if description else ""
         
-        base_prompt = (
-            f"Based on these insights about teaching in {user_input['language']}: {language_expertise}\n\n"
-            "Create a comprehensive, culturally-appropriate course outline with the following details:\n\n"
-            f"Topic: {user_input['topic']}\n"
-            f"{description_part}"
-            f"Language: {user_input['language']}\n"
-            f"Difficulty: {user_input['difficulty']}\n"
-            "Ensure content is culturally relevant and linguistically appropriate and written format follow perticular linguistically. Format as a directive."
-        )
+        base_prompt = f"""
+            Use the following context to generate a high-quality and structured course outline:
+
+            Context:
+            {language_expertise}
+
+            Requirements:
+            - Topic: {user_input['topic']}
+            {description_part}Language: {user_input['language']}
+            - Difficulty Level: {user_input['difficulty']}
+            - Ensure the course follows standard instructional design principles:
+                - Modules must follow a logical progression
+                - Learning outcomes must align with cognitive level of the difficulty
+                - Maintain cultural and linguistic relevance
+                - Use terminology appropriate for {user_input['language']} speakers
+            - Structure the course as a progression of well-designed modules
+
+            Your Task:
+            Write a directive to generate a complete course outline adhering to these educational and cultural standards.
+        """
+
         
         improved_prompt = self.generate_response(base_prompt).strip()
         logger.info("Generated optimized prompt for course generation")
@@ -74,30 +87,27 @@ class GeminiSetup:
         try:
             # optimize the prompt
             improved_prompt = self.optimize_user_input_prompt(user_input)
-            
             difficulty = user_input.get("difficulty")
-            if difficulty == "Beginner":
-                module_count = 7
-            elif difficulty =="Intermediate":
-                module_count = 10
-            else:
-                module_count = 14
+            module_count = {"Beginner": 7, "Intermediate": 10}.get(difficulty, 14)
             
-            prompt = (
-                f"{improved_prompt}\n\n"
-                f"Generate a detailed course outline with {module_count} modules. "
-                "For each module include:\n\n"
-                "1. A clear, engaging title\n"
-                "2. 4-6 specific learning objectives as bullet points\n"
-                "3. Each module should build logically on previous ones\n\n"
-                "Format each module as:\n"
-                "Module X: [Title]\n"
-                "Objectives:\n"
-                "- [Objective 1]\n"
-                "- [Objective 2]\n"
-                "...\n"
-                "---\n"
-            )
+            prompt = f"""
+                {improved_prompt}
+
+                Now, based on the above directive, generate a structured course outline consisting of {module_count} modules.
+
+                For each module:
+                1. Give a clear, engaging module title
+                2. Provide 4-6 learning objectives in bullet points
+                3. Ensure each module builds logically on the previous one
+
+                Format strictly as:
+                Module X: [Title]
+                Objectives:
+                - [Objective 1]
+                - [Objective 2]
+                ...
+                ---
+            """
             
             outline_text = self.generate_response(prompt)
             logger.info("Generated course outline text")
@@ -515,28 +525,43 @@ class GeminiSetup:
         logger.info(f"Generating YouTube data for: {module['title']}")
         
         # Generate search query directly from lesson content
-        prompt = f"""Create one YouTube search query for "{module['title']}" using these key points:
-            {lesson_content[:500]}
-            Language: {user_input['language']}
-            Difficulty: {user_input['difficulty']}
-            Format: 5-8 words, no special characters"""
+        prompt = f"""
+            Generate precise YouTube search query for "{module['title']}" using these guidelines:
+            - Include exact module title: "{module['title']}"z
+            - Focus on key concepts: {', '.join(module['objectives'][:3])}
+            - Language: {user_input['language']}
+            - Difficulty level: {user_input['difficulty']}
+            - Educational content types: tutorial, explanation, demonstration
+            - Format: 5-8 words, only basic punctuation
+            Output only the search query
+        """
+        try:
+            raw_query = self.generate_response(prompt).strip()
+            # Clean while preserving non-English characters
+            search_query = re.sub(r'[^\w\s\-_।॥.,?]', '', raw_query, flags=re.UNICODE)
+            search_query = ' '.join(search_query.split()[:8])  # Limit to 8 words
+            logger.info(f"Final search query: {search_query}")
             
-        raw_query = self.generate_response(prompt)
+            # Get video results with better filtering
+            video_data = self.youtube_worker.search_youtube_videos(
+                search_query,
+                language=user_input['language'].lower()
+            )
+            
+            return {
+                "search_query": search_query,
+                "video_info": video_data
+            }
         
-        # Clean and format the query
-        search_query = raw_query.strip().replace('\n', ' ').replace('"', '')[:60]  # Limit to 60 chars
-        logger.info(f"Final search query: {search_query}")
-        
-        # Get video result
-        video_data = youtube_worker.search_youtube_videos(
-            search_query, 
-            user_input['language'].lower()
-        )
-        
-        return {
-            "search_query": search_query,
-            "video_info": video_data or {}
-        }
+        except Exception as e:
+            logger.error(f"Youtube data generation failed: {str(e)}")
+            return {
+                "search_query": search_query if 'search_query' in locals() else "",
+                "video_info": {}
+            }
+
+course_agent = GeminiSetup()
+    
     
 @dataclass
 class CourseFeedback:
@@ -644,5 +669,3 @@ class AutoCourseAgent(GeminiSetup):
         """
         response = self.generate_response(validation_prompt)
         return "VALID" in response
-
-course_agent = GeminiSetup()
