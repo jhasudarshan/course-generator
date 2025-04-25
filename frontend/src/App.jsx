@@ -19,7 +19,7 @@ function App() {
         </header>
         <main>
           <Routes>
-            <Route path="/courses" element={<CourseGrid />} />
+            <Route path="/" element={<CourseGrid />} />
             <Route path="/course/:courseId" element={<CourseDetail />} />
             <Route path="/create-course" element={<CourseCreationPage />} />
           </Routes>

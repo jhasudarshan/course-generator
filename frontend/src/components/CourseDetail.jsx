@@ -25,7 +25,7 @@ function CourseDetail() {
   
   // Handle back button
   const handleBack = () => {
-    navigate('/courses');
+    navigate('/');
   };
   
   // Toggle sidebar on mobile

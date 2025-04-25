@@ -78,7 +78,7 @@ function CourseCreationPage() {
   };
 
   const handleCancel = () => {
-    navigate('/courses');
+    navigate('/');
   };
 
   const isFormValid = formData.topic.trim() !== '';
