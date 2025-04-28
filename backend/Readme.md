@@ -1,7 +1,12 @@
 **Backend Setup**
 cd backend
+# for window
 python -m venv venv
 venv\Scripts\activate
+# for mac
+python3 -m venv venv
+source venv/bin/activate
+
 
 **requirements.txt**
 pip install fastapi uvicorn python-dotenv
